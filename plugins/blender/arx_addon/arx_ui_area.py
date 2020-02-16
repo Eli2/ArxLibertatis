@@ -64,7 +64,6 @@ def importArea(context, report, area_id):
     
     getAddon(context).sceneManager.importScene(context, scene, area_id)
 
-
 class CUSTOM_OT_arx_area_list_reload(Operator):
     bl_idname = "arx.arx_area_list_reload"
     bl_label = "Reload Area List"
@@ -125,6 +124,19 @@ class ArxOperatorImportAllLevels(bpy.types.Operator):
                 return {'CANCELLED'}
         return {'FINISHED'}
 
+class CUSTOM_OT_arx_area_export(bpy.types.Operator):
+    bl_idname = "arx.operator_area_export"
+    bl_label = "Export Current Area"
+    def invoke(self, context, event):
+        try:
+            scene = context.scene
+            area_id = int(scene.name.split('_')[1])
+            getAddon(context).sceneManager.exportArea(context, scene, area_id)
+        except ArxException as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
 class ArxAreaPanel(Panel):
     bl_idname = "SCENE_PT_arx_areas"
     bl_label = "Arx Areas"
@@ -145,6 +157,8 @@ class ArxAreaPanel(Panel):
         )
         layout.operator("arx.area_list_import_selected")
         layout.operator("arx.operator_import_all_levels")
+        layout.separator()
+        layout.operator("arx.operator_area_export")
 
 
 classes = (
@@ -153,6 +167,7 @@ classes = (
     SCENE_UL_arx_area_list,
     CUSTOM_OT_arx_area_list_import_selected,
     ArxOperatorImportAllLevels,
+    CUSTOM_OT_arx_area_export,
     ArxAreaPanel,
 )
 

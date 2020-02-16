@@ -112,7 +112,7 @@ class ArxAssetManager(object):
 
 
 class ArxAddon(object):
-    def __init__(self, dataPath, allowLibFallback):
+    def __init__(self, dataPath, outPath, allowLibFallback):
         self.log = logging.getLogger('Arx Addon')
         
         try:
@@ -136,7 +136,7 @@ class ArxAddon(object):
         self.arxFiles.updateAll()
         
         self.objectManager = ArxObjectManager(ioLib, dataPath)
-        self.sceneManager = ArxSceneManager(ioLib, dataPath, self.arxFiles, self.objectManager)
+        self.sceneManager = ArxSceneManager(ioLib, dataPath, outPath, self.arxFiles, self.objectManager)
         self.animationManager = ArxAnimationManager()
         self.assetManager = ArxAssetManager(self.arxFiles, self.objectManager, self.sceneManager)
     
@@ -158,6 +158,6 @@ def getAddon(context):
     if not g_arxAddon:
         log.info("creating")
         addon_prefs = context.preferences.addons[__package__].preferences
-        g_arxAddon = ArxAddon(addon_prefs.arxAssetPath, addon_prefs.arxAllowLibFallback)
+        g_arxAddon = ArxAddon(addon_prefs.arxAssetPath, addon_prefs.arxOutputPath, addon_prefs.arxAllowLibFallback)
     
     return g_arxAddon

@@ -17,29 +17,62 @@
 
 import logging
 
+import os
+from pathlib import Path
+
 import bpy
 import bmesh
-from math import radians
+from math import (
+    degrees,
+    radians
+)
 from mathutils import Vector, Matrix
 
-from .dataDlf import DlfSerializer, DlfData
+from .dataCommon import (
+    SavedVec3,
+    SavedAnglef
+)
+from .dataDlf import DlfSerializer, DlfData, DANAE_LS_INTER
 from .dataFts import FtsSerializer
 from .dataLlf import LlfSerializer
 
 from .arx_io_material import createMaterial
-from .arx_io_util import arx_pos_to_blender_for_model, ArxException
+from .arx_io_util import arx_pos_to_blender_for_model, blender_pos_to_arx, ArxException
 
 correctionMatrix = \
     Matrix.Rotation(radians(180), 4, 'Z') @ \
     Matrix.Rotation(radians(-90), 4, 'X')
 
+def getObjectPosition(object, position: SavedVec3):
+    p = blender_pos_to_arx(object.location)
+    position.x = p[0]
+    position.y = p[1]
+    position.z = p[2]
+
+def setObjectPosition(object, offset, position: SavedVec3):
+    p = Vector(offset) + Vector([position.x, position.y, position.z])
+    object.location = arx_pos_to_blender_for_model(p)
+
+def getObjectRotation(object, rotation: SavedAnglef):
+    # FIXME proper rotation conversion
+    rotation.a = degrees(object.rotation_euler[0])
+    rotation.b = degrees(object.rotation_euler[1])
+    rotation.g = degrees(object.rotation_euler[2])
+
+def setObjectRotation(object, rotation: SavedAnglef):
+    # FIXME proper rotation conversion
+    object.rotation_mode = 'YXZ'
+    object.rotation_euler = [radians(rotation.a), radians(rotation.g), radians(rotation.b)]
+
+
 class ArxSceneManager(object):
-    def __init__(self, ioLib, dataPath, arxFiles, objectManager):
+    def __init__(self, ioLib, dataPath, outPath, arxFiles, objectManager):
         self.log = logging.getLogger('ArxSceneManager')
         self.dlfSerializer = DlfSerializer(ioLib)
         self.ftsSerializer = FtsSerializer(ioLib)
         self.llfSerializer = LlfSerializer(ioLib)
         self.dataPath = dataPath
+        self.outPath = outPath
         self.arxFiles = arxFiles
         self.objectManager = objectManager
 
@@ -91,7 +124,31 @@ class ArxSceneManager(object):
         self.AddScenePortals(scene, ftsData)
         self.AddSceneLights(scene, llfData, ftsData.sceneOffset)
         self.AddSceneObjects(scene, dlfData, ftsData.sceneOffset)
+        self.AddPlayer(scene, dlfData, ftsData.sceneOffset)
         self.add_scene_map_camera(scene)
+
+    def exportArea(self, context, scene, area_id):
+        self.log.info('Exporting Area: {}'.format(area_id))
+
+        area_files = self.arxFiles.levels.levels[area_id]
+
+        relDlf = os.path.relpath(area_files.dlf, self.arxFiles.rootPath)
+        relFts = os.path.relpath(area_files.fts, self.arxFiles.rootPath)
+        relLlf = os.path.relpath(area_files.llf, self.arxFiles.rootPath)
+
+        outDlf = Path(self.outPath, relDlf)
+        outFts = Path(self.outPath, relFts)
+        outLlf = Path(self.outPath, relLlf)
+
+        print('{} {} {}'.format(outDlf, outFts, outLlf))
+        
+        #dlfFile = io.BytesIO
+        outDlf.parent.mkdir(parents=True, exist_ok=True)
+        dlfFile = open(outDlf, "wb")
+        dlfData = DlfData(area_id, SavedVec3(), SavedAnglef(), [], [], [])
+        self.GetPlayer(scene, dlfData)
+        self.getSceneObjects(dlfData, scene)
+        self.dlfSerializer.writeContainer(dlfFile, dlfData)
 
     def AddSceneBackground(self, cells, levelLighting, mappedMaterials):
         bm = bmesh.new()
@@ -239,7 +296,7 @@ class ArxSceneManager(object):
             legacyPath = e.name.decode('iso-8859-1').replace("\\", "/").lower().split('/')
             objectId = '/'.join(legacyPath[legacyPath.index('interactive') + 1 : -1])
 
-            entityId = objectId + "_" + str(e.ident).zfill(4)
+            entityId = objectId + ":" + str(e.ident).zfill(4)
             self.log.info("Creating entity [{}]".format(entityId))
 
             proxyObject = bpy.data.objects.new(name='e:' + entityId, object_data=None)
@@ -254,13 +311,43 @@ class ArxSceneManager(object):
                 proxyObject.empty_display_type = 'ARROWS'
                 proxyObject.empty_display_size = 20 #cm
                 #self.log.info("Object not found: [{}]".format(objectId))
+            
+            setObjectPosition(proxyObject, sceneOffset, e.pos)
+            setObjectRotation(proxyObject, e.angle)
 
-            pos = Vector(sceneOffset) + Vector([e.pos.x, e.pos.y, e.pos.z])
-            proxyObject.location = arx_pos_to_blender_for_model(pos)
+    
+    def getSceneObjects(self, result: DlfData, scene):
+        entities_col = bpy.data.collections[scene.name + '-entities']
+        for obj in entities_col.objects:
+            foo = obj.name.split(':')
+            if len(foo) != 3 or not foo[0] == 'e':
+                self.log.warn('Invalid entity name in collection: {}'.format(obj.name))
+                continue
 
-            # FIXME proper rotation conversion
-            #proxyObject.rotation_mode = 'YXZ'
-            proxyObject.rotation_euler = [radians(e.angle.a), radians(e.angle.g), radians(e.angle.b)]
+            entity = DANAE_LS_INTER()
+            entity.name = foo[1].encode('iso-8859-1')
+            entity.ident = int(foo[2])
+
+            getObjectPosition(obj, entity.pos)
+            getObjectRotation(obj, entity.angle)
+
+            # TODO read the rest of the entity data
+
+            result.entities.append(entity)
+
+    def AddPlayer(self, scene, dlfData: DlfData, sceneOffset):
+        obj = bpy.data.objects.new(name=scene.name + '-player', object_data=None)
+        obj.show_name = True
+        obj.empty_display_type = 'ARROWS'
+        obj.empty_display_size = 60 #cm
+        setObjectPosition(obj, sceneOffset, dlfData.playerPos)
+        setObjectRotation(obj, dlfData.playerRot)
+        scene.collection.objects.link(obj)
+
+    def GetPlayer(self, scene, dlfData: DlfData):
+        obj = bpy.data.objects[scene.name + '-player']
+        getObjectPosition(obj, dlfData.playerPos)
+        getObjectRotation(obj, dlfData.playerRot)
 
     def add_scene_map_camera(self, scene):
         """Grid size is 160x160m"""

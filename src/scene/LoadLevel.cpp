@@ -252,13 +252,13 @@ bool DanaeLoadLevel(const res::path & file, bool loadEntities) {
 	
 	LogDebug("dlh.version " << dlh.version << " header size " << sizeof(DANAE_LS_HEADER));
 	
-	if(dlh.version > DLH_CURRENT_VERSION) {
+	if(dlh.version > DLH_CURRENT_VERSION && dlh.version != 2.0f) {
 		LogError << "Unexpected level file version: " << dlh.version << " for " << file;
 		return false;
 	}
 	
 	// using compression
-	if(dlh.version >= 1.44f) {
+	if(dlh.version >= 1.44f && dlh.version < 2.0f) {
 		buffer = blast(buffer.data() + pos, buffer.size() - pos);
 		if(buffer.empty()) {
 			LogError << "Could not decompress level file " << file;

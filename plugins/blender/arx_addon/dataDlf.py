@@ -171,6 +171,9 @@ from typing import List, Tuple
 
 @dataclass
 class DlfData:
+    areaId:    int
+    playerPos: SavedVec3
+    playerRot: SavedAnglef
     entities: List[DANAE_LS_INTER]
     fogs:     List[DANAE_LS_FOG]
     paths:    List[Tuple[DANAE_LS_PATH, List[DANAE_LS_PATHWAYS]]]
@@ -180,13 +183,13 @@ class DlfSerializer(object):
         self.log = logging.getLogger('DlfSerializer')
         self.ioLib = ioLib
     
-    def read(self, data, lsHeader) -> DlfData:
+    def read(self, data, lsHeader: DANAE_LS_HEADER) -> DlfData:
         pos = 0
         result = {}
         
         scnHeader = DANAE_LS_SCENE.from_buffer_copy(data, pos)
         pos += sizeof(DANAE_LS_SCENE)
-        self.log.debug("DANAE_LS_SCENE name: %s" % scnHeader.name.decode('iso-8859-1'))
+        self.log.info("DANAE_LS_SCENE name: %s" % scnHeader.name.decode('iso-8859-1'))
         
         EntitiesType = DANAE_LS_INTER * lsHeader.nb_inter
         entities = EntitiesType.from_buffer_copy(data, pos)
@@ -223,12 +226,29 @@ class DlfSerializer(object):
             paths.append((path, segments))
 
         return DlfData(
+            areaId=666,
+            playerPos=lsHeader.pos_edit,
+            playerRot=lsHeader.angle_edit,
             entities=entities,
             fogs=fogs,
             paths=paths
         )
-        
-    
+
+    def write(self, dlfFile, dlfData: DlfData):
+        scnHeader = DANAE_LS_SCENE()
+        scnHeader.name = "graph/levels/level{}".format(dlfData.areaId).encode('iso-8859-1')
+        dlfFile.write(scnHeader)
+        for e in dlfData.entities:
+            dlfFile.write(e)
+        # Skip lights
+        for f in dlfData.fogs:
+            dlfFile.write(f)
+        # Skip nodes
+        for p in dlfData.paths:
+            dlfFile.write(p)
+            for s in p.nb_pathways:
+                dlfFile.write(s)
+
     def readContainer(self, fileName) -> DlfData:
         f = open(fileName, "rb")
         data = f.read()
@@ -247,4 +267,16 @@ class DlfSerializer(object):
         uncompressed = self.ioLib.unpack(data[pos:])
         
         return self.read(uncompressed, lsHeader)
-
+    
+    def writeContainer(self, dlfFile, dlfData: DlfData):
+        lsHeader = DANAE_LS_HEADER()
+        lsHeader.version = 2.0
+        lsHeader.ident = b'DANAE_FILE'
+        lsHeader.lastuser = b'arx-libertatis-blender-addon'
+        lsHeader.nb_scn = 1
+        lsHeader.nb_inter = len(dlfData.entities)
+        lsHeader.lighting = 0
+        lsHeader.nb_lights = 0
+        lsHeader.nb_fogs = len(dlfData.fogs)
+        dlfFile.write(lsHeader)
+        self.write(dlfFile, dlfData)

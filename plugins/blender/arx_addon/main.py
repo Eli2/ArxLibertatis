@@ -65,6 +65,11 @@ class ArxAddonPreferences(bpy.types.AddonPreferences):
         subtype='DIR_PATH',
         update=reload
     )
+    arxOutputPath: bpy.props.StringProperty(
+        name="Arx assets output directory",
+        subtype='DIR_PATH',
+        update=reload
+    )
     arxAllowLibFallback: bpy.props.BoolProperty(
         name="Allow use of fallback io library, only import ftl models, scenes are broken!",
         update=reload
@@ -73,6 +78,7 @@ class ArxAddonPreferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "arxAssetPath")
+        layout.prop(self, "arxOutputPath")
         layout.prop(self, "arxAllowLibFallback")
 
 # ======================================================================================================================
