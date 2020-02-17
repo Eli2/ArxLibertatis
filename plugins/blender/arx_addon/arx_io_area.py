@@ -124,6 +124,7 @@ class ArxSceneManager(object):
         self.AddScenePortals(scene, ftsData)
         self.AddSceneLights(scene, llfData, ftsData.sceneOffset)
         self.AddSceneObjects(scene, dlfData, ftsData.sceneOffset)
+        self.AddPaths(scene, dlfData, ftsData.sceneOffset)
         self.AddPlayer(scene, dlfData, ftsData.sceneOffset)
         self.add_scene_map_camera(scene)
 
@@ -334,6 +335,37 @@ class ArxSceneManager(object):
             # TODO read the rest of the entity data
 
             result.entities.append(entity)
+
+    def AddPaths(self, scene, dlfData: DlfData, sceneOffset):
+        col = bpy.data.collections.new(scene.name + '-paths')
+        scene.collection.children.link(col)
+
+        for arxPath in dlfData.paths:
+            path = arxPath[0]
+            name = path.name.decode('iso-8859-1')
+
+            arxPathPoints = arxPath[1]
+            curve = bpy.data.curves.new(scene.name + '-path-' + name, type='CURVE')
+            curve.dimensions = '3D'
+
+            spline = curve.splines.new('POLY')
+
+            spline.points.add(len(arxPathPoints))
+            for i, arxPathPoint in enumerate(arxPathPoints):
+                arxPos = Vector([arxPathPoint.rpos.x, arxPathPoint.rpos.y, arxPathPoint.rpos.z])
+                blePos = arx_pos_to_blender_for_model(arxPos)
+                spline.points[i].co = (blePos[0], blePos[1], blePos[2], 1)
+
+            if path.height == 0:
+                spline.type = 'NURBS'
+            else:
+                # It's a zone !
+                pass
+
+            obj = bpy.data.objects.new(scene.name + '-path-' + name, curve)
+            setObjectPosition(obj, sceneOffset, path.pos)
+            col.objects.link(obj)
+
 
     def AddPlayer(self, scene, dlfData: DlfData, sceneOffset):
         obj = bpy.data.objects.new(name=scene.name + '-player', object_data=None)
