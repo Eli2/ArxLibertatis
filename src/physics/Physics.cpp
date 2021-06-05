@@ -50,8 +50,10 @@ ZeniMax Media Inc., Suite 120, Rockville, Maryland 20850 USA.
 
 #include <boost/foreach.hpp>
 
+#include "graphics/Raycast.h"
 #include "graphics/GraphicsTypes.h"
 #include "graphics/data/Mesh.h"
+
 #include "math/Vector.h"
 
 #include "core/GameTime.h"
@@ -809,6 +811,8 @@ bool EERIE_PHYSICS_BOX_IsValidPosition(const Vec3f & pos) {
 	return true;
 }
 
+#include "graphics/DrawDebug.h"
+
 static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA & pbox, float framediff, Entity & source) {
 
 	Vec3f oldpos[32];
@@ -825,19 +829,33 @@ static void ARX_EERIE_PHYSICS_BOX_Compute(PHYSICS_BOX_DATA & pbox, float framedi
 	
 	EERIEPOLY * collisionPoly = NULL;
 	
-	bool invalidPosition = false;
 	for(size_t i = 0; i < pbox.vert.size(); i += 2) {
-		if(!EERIE_PHYSICS_BOX_IsValidPosition(pbox.vert[i].pos - Vec3f(0.f, 10.f, 0.f))) {
-			// This indicaties that entity-world collisions are broken
-			LogWarning << "Entity " << source.idString() << " escaped the world";
-			invalidPosition = true;
+
+		const Vec3f start = oldpos[i];
+		const Vec3f end = pbox.vert[i].pos;
+		RaycastResult ray = raycastScene(start, end, POLY_NOCOL | POLY_WATER | POLY_TRANS);
+		if(ray.hit) {
+			collisionPoly = ray.hit;
+			debug::drawRay(start, end, Color::white, PlatformDurationMs(1000));
 			break;
 		}
 	}
+
+
+
+//	bool invalidPosition = false;
+//	for(size_t i = 0; i < pbox.vert.size(); i += 2) {
+//		if(!EERIE_PHYSICS_BOX_IsValidPosition(pbox.vert[i].pos - Vec3f(0.f, 10.f, 0.f))) {
+//			// This indicaties that entity-world collisions are broken
+//			LogWarning << "Entity " << source.idString() << " escaped the world";
+//			invalidPosition = true;
+//			break;
+//		}
+//	}
 	
-	if(   !IsFULLObjectVertexInValidPosition(pbox, collisionPoly)
+	if( collisionPoly
 	   || ARX_INTERACTIVE_CheckFULLCollision(pbox, source)
-	   || invalidPosition
+	   //|| invalidPosition
 	   || IsObjectInField(pbox)
 	) {
 		

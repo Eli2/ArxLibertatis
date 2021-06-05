@@ -1525,7 +1525,7 @@ float ARX_DAMAGES_ComputeRepairPrice(const Entity * torepair, const Entity * bla
 }
 
 void ARX_DAMAGES_DrawDebug() {
-	
+
 	for(size_t i = 0; i < MAX_DAMAGES; i++) {
 		if(!g_damages[i].exist)
 			continue;
